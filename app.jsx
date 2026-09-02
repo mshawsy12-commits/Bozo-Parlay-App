@@ -1153,6 +1153,14 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
       setPropLoading(false);
     }
   }
+  // Auto-load whenever the prop market changes, the game changes, or the bet type
+  // switches to "prop" — no manual "Load" click needed.
+  useEffect(() => {
+    if (betType === "prop" && oddsApiKey && oddsEvent?.id) {
+      loadProps(propMarket);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [betType, propMarket, oddsEvent]);
   function usePropRow(row) {
     const marketLabel = PROP_MARKETS.find((m) => m.key === propMarket)?.label || "";
     const desc = row.side
@@ -1281,20 +1289,22 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
                   </button>
                 </div>
               ) : (
-                <>
+                <div className="bp-prop-browser">
                   <div className="bp-search-row">
                     <select value={propMarket} onChange={(e) => setPropMarket(e.target.value)} style={{ flex: 1 }}>
                       {PROP_MARKETS.map((m) => (
                         <option key={m.key} value={m.key}>{m.label}</option>
                       ))}
                     </select>
-                    <button type="button" className="bp-btn small" onClick={() => loadProps(propMarket)} disabled={propLoading} style={{ flexShrink: 0 }}>
-                      {propLoading ? "…" : "Load"}
+                    <button type="button" className="bp-btn ghost small" onClick={() => loadProps(propMarket)} disabled={propLoading} style={{ flexShrink: 0 }}>
+                      {propLoading ? "…" : "Refresh"}
                     </button>
                   </div>
+                  <div className="bp-prop-browser-divider" />
+                  {propLoading && <div className="bp-hint">Loading props…</div>}
                   {propError && <div className="bp-hint">{propError}</div>}
-                  {propRows && propRows.length > 0 && (
-                    <div className="bp-odds-rows" style={{ marginTop: 6 }}>
+                  {!propLoading && propRows && propRows.length > 0 && (
+                    <div className="bp-odds-rows">
                       {propRows.map((row, i) => (
                         <button type="button" key={i} className="bp-odds-row" onClick={() => usePropRow(row)}>
                           <span>
@@ -1306,7 +1316,7 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
                       ))}
                     </div>
                   )}
-                </>
+                </div>
               )}
             </>
           )}

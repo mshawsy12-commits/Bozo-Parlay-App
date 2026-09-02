@@ -1483,6 +1483,14 @@ function PickForm({
       setPropLoading(false);
     }
   }
+  // Auto-load whenever the prop market changes, the game changes, or the bet type
+  // switches to "prop" — no manual "Load" click needed.
+  useEffect(() => {
+    if (betType === "prop" && oddsApiKey && oddsEvent?.id) {
+      loadProps(propMarket);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [betType, propMarket, oddsEvent]);
   function usePropRow(row) {
     const marketLabel = PROP_MARKETS.find(m => m.key === propMarket)?.label || "";
     const desc = row.side ? `${row.player} ${row.side} ${row.line} ${marketLabel}` : `${row.player} — ${marketLabel}`;
@@ -1595,7 +1603,9 @@ function PickForm({
     type: "button",
     className: "bp-odds-change",
     onClick: () => setPropPicked(null)
-  }, "Change")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "Change")) : /*#__PURE__*/React.createElement("div", {
+    className: "bp-prop-browser"
+  }, /*#__PURE__*/React.createElement("div", {
     className: "bp-search-row"
   }, /*#__PURE__*/React.createElement("select", {
     value: propMarket,
@@ -1608,19 +1618,20 @@ function PickForm({
     value: m.key
   }, m.label))), /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "bp-btn small",
+    className: "bp-btn ghost small",
     onClick: () => loadProps(propMarket),
     disabled: propLoading,
     style: {
       flexShrink: 0
     }
-  }, propLoading ? "…" : "Load")), propError && /*#__PURE__*/React.createElement("div", {
+  }, propLoading ? "…" : "Refresh")), /*#__PURE__*/React.createElement("div", {
+    className: "bp-prop-browser-divider"
+  }), propLoading && /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
-  }, propError), propRows && propRows.length > 0 && /*#__PURE__*/React.createElement("div", {
-    className: "bp-odds-rows",
-    style: {
-      marginTop: 6
-    }
+  }, "Loading props…"), propError && /*#__PURE__*/React.createElement("div", {
+    className: "bp-hint"
+  }, propError), !propLoading && propRows && propRows.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "bp-odds-rows"
   }, propRows.map((row, i) => /*#__PURE__*/React.createElement("button", {
     type: "button",
     key: i,
