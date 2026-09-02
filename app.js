@@ -54,6 +54,31 @@ const BET_TYPES = [{
   id: "prop",
   label: "Prop / Other"
 }];
+const PROP_MARKETS = [{
+  key: "player_pass_yds",
+  label: "Passing Yards"
+}, {
+  key: "player_pass_tds",
+  label: "Passing TDs"
+}, {
+  key: "player_pass_completions",
+  label: "Completions"
+}, {
+  key: "player_rush_yds",
+  label: "Rushing Yards"
+}, {
+  key: "player_rush_attempts",
+  label: "Rush Attempts"
+}, {
+  key: "player_reception_yds",
+  label: "Receiving Yards"
+}, {
+  key: "player_receptions",
+  label: "Receptions"
+}, {
+  key: "player_anytime_td",
+  label: "Anytime TD Scorer"
+}];
 const STATUS_META = {
   pending: {
     label: "Pending",
@@ -368,6 +393,46 @@ function oddsRowsForMarket(event, betType, teamName, side) {
         odds: outcome.price,
         line: outcome.point
       });
+    }
+  }
+  return rows;
+}
+
+// ---- player props: needs the Odds API's own event id (already present on the
+// matched event object from fetchOddsApiOdds), then a per-event props call ----
+async function fetchPlayerProps(apiKey, eventId, marketKey) {
+  const url = `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/events/${eventId}/odds?apiKey=${encodeURIComponent(apiKey)}&regions=us&markets=${marketKey}&oddsFormat=decimal`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("fetch-failed");
+  return res.json();
+}
+// Flattens one event's bookmakers into simple prop rows for a given market.
+function propRowsForMarket(eventOdds, marketKey) {
+  if (!eventOdds) return [];
+  const rows = [];
+  for (const bk of eventOdds.bookmakers || []) {
+    const market = bk.markets?.find(m => m.key === marketKey);
+    if (!market) continue;
+    for (const o of market.outcomes || []) {
+      if (o.description) {
+        // standard over/under prop: name = "Over"/"Under", description = player name, point = line
+        rows.push({
+          bookmaker: bk.title,
+          player: o.description,
+          side: o.name,
+          line: o.point,
+          odds: o.price
+        });
+      } else {
+        // anytime-TD style: name = player name, no line
+        rows.push({
+          bookmaker: bk.title,
+          player: o.name,
+          side: null,
+          line: null,
+          odds: o.price
+        });
+      }
     }
   }
   return rows;
@@ -1391,6 +1456,32 @@ function PickForm({
     setOdds(row.odds);
     if (row.line != null && (betType === "spread" || betType === "total")) setLine(row.line);
   }
+  const [propMarket, setPropMarket] = useState(PROP_MARKETS[0].key);
+  const [propRows, setPropRows] = useState(null);
+  const [propLoading, setPropLoading] = useState(false);
+  const [propError, setPropError] = useState("");
+  async function loadProps(marketKey) {
+    if (!oddsApiKey || !oddsEvent?.id) return;
+    setPropLoading(true);
+    setPropError("");
+    setPropRows(null);
+    try {
+      const eventOdds = await fetchPlayerProps(oddsApiKey, oddsEvent.id, marketKey);
+      const rows = propRowsForMarket(eventOdds, marketKey);
+      if (rows.length === 0) setPropError("No props posted for this market yet — try again closer to kickoff.");
+      setPropRows(rows);
+    } catch {
+      setPropError("Couldn't reach the live props feed right now.");
+    } finally {
+      setPropLoading(false);
+    }
+  }
+  function usePropRow(row) {
+    const marketLabel = PROP_MARKETS.find(m => m.key === propMarket)?.label || "";
+    const desc = row.side ? `${row.player} ${row.side} ${row.line} ${marketLabel}` : `${row.player} — ${marketLabel}`;
+    setNotes(desc);
+    setOdds(row.odds);
+  }
   function submit() {
     if (!team.trim() || odds === "") {
       setError("Team and odds are required.");
@@ -1479,7 +1570,46 @@ function PickForm({
     className: "bp-odds-row-value"
   }, row.line != null && betType !== "moneyline" ? `${row.line > 0 ? "+" : ""}${row.line} · ` : "", row.odds.toFixed(2))))), !oddsLoading && !oddsError && oddsRows.length === 0 && oddsEvent && /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
-  }, "No bookmaker has posted a ", betType, " line for this game yet.")), /*#__PURE__*/React.createElement("div", {
+  }, "No bookmaker has posted a ", betType, " line for this game yet.")), oddsApiKey && team && betType === "prop" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Browse player props"), !oddsEvent && /*#__PURE__*/React.createElement("div", {
+    className: "bp-hint"
+  }, "Search and pick a game above first to browse its props."), oddsEvent && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "bp-search-row"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: propMarket,
+    onChange: e => setPropMarket(e.target.value),
+    style: {
+      flex: 1
+    }
+  }, PROP_MARKETS.map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.key,
+    value: m.key
+  }, m.label))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "bp-btn small",
+    onClick: () => loadProps(propMarket),
+    disabled: propLoading,
+    style: {
+      flexShrink: 0
+    }
+  }, propLoading ? "…" : "Load")), propError && /*#__PURE__*/React.createElement("div", {
+    className: "bp-hint"
+  }, propError), propRows && propRows.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "bp-odds-rows",
+    style: {
+      marginTop: 6
+    }
+  }, propRows.map((row, i) => /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    key: i,
+    className: "bp-odds-row",
+    onClick: () => usePropRow(row)
+  }, /*#__PURE__*/React.createElement("span", null, row.player, " ", row.side ? `${row.side} ${row.line}` : "", " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--ink-dim)"
+    }
+  }, "(", row.bookmaker, ")")), /*#__PURE__*/React.createElement("span", {
+    className: "bp-odds-row-value"
+  }, row.odds.toFixed(2))))))), /*#__PURE__*/React.createElement("div", {
     className: "bp-form-row"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Your team / side"), /*#__PURE__*/React.createElement("input", {
     value: team,
