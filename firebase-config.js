@@ -15,7 +15,7 @@ const firebaseConfig = {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, setDoc, onSnapshot,
+  getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot,
   collection, getDocs, query,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
@@ -67,6 +67,9 @@ window.BozoDB = {
   // ---- picks (subcollection: one doc per person, so rules can enforce ownership) ----
   async setPick(weekId, person, pick) {
     await setDoc(pickRef(weekId, person), pick);
+  },
+  async deletePick(weekId, person) {
+    await deleteDoc(pickRef(weekId, person));
   },
   watchPicks(weekId, cb) {
     return onSnapshot(query(collection(db, "weeks", weekId, "picks")), (snap) => {

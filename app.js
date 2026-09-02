@@ -322,6 +322,56 @@ function findOddsApiEvent(events, teamName, oppName) {
     comp
   };
 }
+async function fetchOddsApiOdds(apiKey) {
+  const url = `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${encodeURIComponent(apiKey)}&regions=us,uk&markets=h2h,spreads,totals&oddsFormat=decimal`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("fetch-failed");
+  return res.json();
+}
+function findOddsApiOddsEvent(events, teamName, oppName) {
+  const wanted = normalize(teamName);
+  const wantedOpp = normalize(oppName);
+  const nameSet = ev => [normalize(ev.home_team), normalize(ev.away_team)];
+  let match = events.find(ev => {
+    const [h, a] = nameSet(ev);
+    const hasTeam = (h.includes(wanted) || a.includes(wanted)) && wanted;
+    const hasOpp = !wantedOpp || h.includes(wantedOpp) || a.includes(wantedOpp);
+    return hasTeam && hasOpp;
+  });
+  if (!match) match = events.find(ev => {
+    const [h, a] = nameSet(ev);
+    return wanted && (h.includes(wanted) || a.includes(wanted));
+  });
+  return match || null;
+}
+// Flattens one matched event's bookmakers into simple rows for the bet type currently selected.
+function oddsRowsForMarket(event, betType, teamName, side) {
+  if (!event) return [];
+  const marketKey = betType === "moneyline" ? "h2h" : betType === "spread" ? "spreads" : betType === "total" ? "totals" : null;
+  if (!marketKey) return [];
+  const wanted = normalize(teamName);
+  const rows = [];
+  for (const bk of event.bookmakers || []) {
+    const market = bk.markets?.find(m => m.key === marketKey);
+    if (!market) continue;
+    if (marketKey === "totals") {
+      const outcome = market.outcomes?.find(o => o.name?.toLowerCase() === side);
+      if (outcome) rows.push({
+        bookmaker: bk.title,
+        odds: outcome.price,
+        line: outcome.point
+      });
+    } else {
+      const outcome = market.outcomes?.find(o => normalize(o.name).includes(wanted));
+      if (outcome) rows.push({
+        bookmaker: bk.title,
+        odds: outcome.price,
+        line: outcome.point
+      });
+    }
+  }
+  return rows;
+}
 
 /* ---------------- UI helpers ---------------- */
 
@@ -660,6 +710,11 @@ function App() {
       status
     });
   }
+  async function clearPick(person) {
+    if (!canEdit(person)) return;
+    if (!window.confirm(`Clear ${person}'s pick for this week? This can't be undone.`)) return;
+    await window.BozoDB.deletePick(currentWeekId, person);
+  }
   async function setBozo(person) {
     await window.BozoDB.setWeekMeta(currentWeekId, {
       ...weekMeta,
@@ -920,6 +975,7 @@ function App() {
     setEditingPerson: setEditingPerson,
     saveWeeklyPick: saveWeeklyPick,
     setManualStatus: setManualStatus,
+    clearPick: clearPick,
     checkScore: checkScore,
     grading: grading,
     setBozo: setBozo,
@@ -927,6 +983,7 @@ function App() {
     isAdmin: isAdmin,
     canEditStake: canEditStake,
     editStake: editStake,
+    oddsApiKey: oddsApiKey,
     onOpenVote: () => setVoteModalOpen(true)
   }), tab === "standings" && /*#__PURE__*/React.createElement(StandingsTab, {
     people: people,
@@ -1074,6 +1131,7 @@ function BetsTab({
   setEditingPerson,
   saveWeeklyPick,
   setManualStatus,
+  clearPick,
   checkScore,
   grading,
   setBozo,
@@ -1081,6 +1139,7 @@ function BetsTab({
   isAdmin,
   canEditStake,
   editStake,
+  oddsApiKey,
   onOpenVote
 }) {
   const losers = weekLosers(weekPicks);
@@ -1136,7 +1195,8 @@ function BetsTab({
         onDoubleClick: e => e.stopPropagation()
       }, /*#__PURE__*/React.createElement(PickForm, {
         initial: pick,
-        onSubmit: pk => saveWeeklyPick(p.name, pk)
+        onSubmit: pk => saveWeeklyPick(p.name, pk),
+        oddsApiKey: oddsApiKey
       })));
     }
     if (!pick) {
@@ -1173,7 +1233,8 @@ function BetsTab({
       grading: grading,
       onEdit: () => editable && setEditingPerson(p.name),
       onCheckScore: () => checkScore(p.name),
-      onManualStatus: s => setManualStatus(p.name, s)
+      onManualStatus: s => setManualStatus(p.name, s),
+      onClear: () => clearPick(p.name)
     });
   })));
 }
@@ -1186,7 +1247,8 @@ function BetCard({
   grading,
   onEdit,
   onCheckScore,
-  onManualStatus
+  onManualStatus,
+  onClear
 }) {
   const canGrade = bet.status === "pending" && bet.betType !== "prop";
   const g = grading[gradingKey];
@@ -1223,7 +1285,10 @@ function BetCard({
     className: "bp-btn small",
     onClick: onCheckScore,
     disabled: g === "checking"
-  }, g === "checking" ? "Checking…" : "Check Score"), !editable && /*#__PURE__*/React.createElement("span", {
+  }, g === "checking" ? "Checking…" : "Check Score"), editable && /*#__PURE__*/React.createElement("button", {
+    className: "bp-btn ghost small danger",
+    onClick: onClear
+  }, "Clear"), !editable && /*#__PURE__*/React.createElement("span", {
     className: "bp-readonly-tag"
   }, "view only")), g === "not-final" && /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
@@ -1259,7 +1324,8 @@ function BetCard({
 }
 function PickForm({
   initial,
-  onSubmit
+  onSubmit,
+  oddsApiKey
 }) {
   const [betType, setBetType] = useState(initial?.betType || "moneyline");
   const [team, setTeam] = useState(initial?.team || "");
@@ -1276,6 +1342,9 @@ function PickForm({
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
   const [searchError, setSearchError] = useState("");
+  const [oddsEvent, setOddsEvent] = useState(null);
+  const [oddsLoading, setOddsLoading] = useState(false);
+  const [oddsError, setOddsError] = useState("");
   async function runSearch() {
     setSearching(true);
     setSearchError("");
@@ -1293,14 +1362,34 @@ function PickForm({
       setSearching(false);
     }
   }
-  function pickSide(opt, sideKey) {
+  async function pickSide(opt, sideKey) {
     const parts = toLocalDateTimeParts(opt.isoDate);
-    setTeam(sideKey === "home" ? opt.home : opt.away);
-    setOpponent(sideKey === "home" ? opt.away : opt.home);
+    const myTeam = sideKey === "home" ? opt.home : opt.away;
+    const oppTeam = sideKey === "home" ? opt.away : opt.home;
+    setTeam(myTeam);
+    setOpponent(oppTeam);
     setGameDate(parts.date);
     setKickoffTime(parts.time);
     setEspnEventId(opt.id);
     setSearchResults(null);
+    setOddsEvent(null);
+    setOddsError("");
+    if (oddsApiKey) {
+      setOddsLoading(true);
+      try {
+        const events = await fetchOddsApiOdds(oddsApiKey);
+        const match = findOddsApiOddsEvent(events, myTeam, oppTeam);
+        if (match) setOddsEvent(match);else setOddsError("No live odds found for this game yet — bookmakers may not have posted lines.");
+      } catch {
+        setOddsError("Couldn't reach the live odds feed right now.");
+      } finally {
+        setOddsLoading(false);
+      }
+    }
+  }
+  function useOddsRow(row) {
+    setOdds(row.odds);
+    if (row.line != null && (betType === "spread" || betType === "total")) setLine(row.line);
   }
   function submit() {
     if (!team.trim() || odds === "") {
@@ -1323,6 +1412,7 @@ function PickForm({
       live: null
     });
   }
+  const oddsRows = oddsRowsForMarket(oddsEvent, betType, team, side);
   return /*#__PURE__*/React.createElement("div", {
     className: "bp-form"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Search NFL game (optional — auto-fills team, opponent, date & kickoff time)"), /*#__PURE__*/React.createElement("div", {
@@ -1366,13 +1456,30 @@ function PickForm({
     onClick: () => pickSide(opt, "home")
   }, opt.home))))), /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
-  }, "Tap the team you're betting on to fill in the fields below.")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Bet type"), /*#__PURE__*/React.createElement("select", {
+  }, "Tap the team you're betting on to fill in the fields below."), !oddsApiKey && /*#__PURE__*/React.createElement("div", {
+    className: "bp-hint"
+  }, "Add an Odds API key (🔑 button in the header) to pull real bookmaker lines here.")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Bet type"), /*#__PURE__*/React.createElement("select", {
     value: betType,
     onChange: e => setBetType(e.target.value)
   }, BET_TYPES.map(b => /*#__PURE__*/React.createElement("option", {
     key: b.id,
     value: b.id
-  }, b.label)))), /*#__PURE__*/React.createElement("div", {
+  }, b.label)))), oddsApiKey && team && betType !== "prop" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Live odds — tap one to fill in Odds", betType !== "moneyline" ? " and the line" : ""), oddsLoading && /*#__PURE__*/React.createElement("div", {
+    className: "bp-hint"
+  }, "Loading odds…"), oddsError && /*#__PURE__*/React.createElement("div", {
+    className: "bp-hint"
+  }, oddsError), !oddsLoading && oddsRows.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "bp-odds-rows"
+  }, oddsRows.map((row, i) => /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    key: i,
+    className: "bp-odds-row",
+    onClick: () => useOddsRow(row)
+  }, /*#__PURE__*/React.createElement("span", null, row.bookmaker), /*#__PURE__*/React.createElement("span", {
+    className: "bp-odds-row-value"
+  }, row.line != null && betType !== "moneyline" ? `${row.line > 0 ? "+" : ""}${row.line} · ` : "", row.odds.toFixed(2))))), !oddsLoading && !oddsError && oddsRows.length === 0 && oddsEvent && /*#__PURE__*/React.createElement("div", {
+    className: "bp-hint"
+  }, "No bookmaker has posted a ", betType, " line for this game yet.")), /*#__PURE__*/React.createElement("div", {
     className: "bp-form-row"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Your team / side"), /*#__PURE__*/React.createElement("input", {
     value: team,

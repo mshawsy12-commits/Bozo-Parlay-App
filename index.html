@@ -48,6 +48,8 @@
   .bp-btn:hover { filter:brightness(1.06); }
   .bp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .bp-btn.ghost { background:var(--card); color:var(--ink); border:1px solid var(--line); box-shadow:none; }
+  .bp-btn.ghost.danger { color: var(--pink); border-color: rgba(234,76,137,0.4); }
+  .bp-btn.ghost.danger:hover { background: rgba(234,76,137,0.1); }
   .bp-btn.small { padding:6px 12px; font-size:12px; }
   .bp-tabs { display:inline-flex; gap:2px; margin-top:20px; background: var(--card); border-radius: 999px; padding: 4px; }
   .bp-tab { background:transparent; border:none; color:var(--ink-dim); font-family:'Outfit',sans-serif; font-weight:600; font-size:13px; padding:9px 18px; cursor:pointer; border-radius:999px; }
@@ -111,6 +113,14 @@
   .bp-search-item-teams { display:flex; gap:6px; flex-wrap:wrap; }
   .bp-search-pick { background: var(--card-2); border:1px solid var(--line); color:var(--ink); border-radius:999px; padding:4px 10px; font-size:11px; cursor:pointer; }
   .bp-search-pick:hover { border-color: var(--purple); }
+  .bp-odds-rows { display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto; }
+  .bp-odds-row {
+    display:flex; justify-content:space-between; align-items:center; background:var(--bg-deep);
+    border:1px solid var(--line); border-radius:12px; padding:9px 12px; cursor:pointer;
+    font-family:'Archivo',sans-serif; color:var(--ink); font-size:13px; width:100%;
+  }
+  .bp-odds-row:hover { border-color: var(--purple); }
+  .bp-odds-row-value { font-family:'Outfit',sans-serif; font-weight:700; color:var(--purple); }
   .bp-standings-card { background: var(--card); border:1px solid var(--line); border-radius:20px; padding:18px 20px; box-shadow: 0 8px 24px rgba(5,7,20,0.35); margin-bottom: 20px; }
   .bp-chart-row { display:flex; align-items:flex-end; gap:14px; height:130px; padding-top:10px; }
   .bp-chart-col { display:flex; flex-direction:column; align-items:center; gap:8px; flex:1; height:100%; justify-content:flex-end; }
