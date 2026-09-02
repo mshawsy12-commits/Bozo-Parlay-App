@@ -1410,6 +1410,7 @@ function PickForm({
   const [oddsEvent, setOddsEvent] = useState(null);
   const [oddsLoading, setOddsLoading] = useState(false);
   const [oddsError, setOddsError] = useState("");
+  const [oddsPicked, setOddsPicked] = useState(null);
   async function runSearch() {
     setSearching(true);
     setSearchError("");
@@ -1439,6 +1440,9 @@ function PickForm({
     setSearchResults(null);
     setOddsEvent(null);
     setOddsError("");
+    setOddsPicked(null);
+    setPropRows(null);
+    setPropPicked(null);
     if (oddsApiKey) {
       setOddsLoading(true);
       try {
@@ -1455,16 +1459,19 @@ function PickForm({
   function useOddsRow(row) {
     setOdds(row.odds);
     if (row.line != null && (betType === "spread" || betType === "total")) setLine(row.line);
+    setOddsPicked(row);
   }
   const [propMarket, setPropMarket] = useState(PROP_MARKETS[0].key);
   const [propRows, setPropRows] = useState(null);
   const [propLoading, setPropLoading] = useState(false);
   const [propError, setPropError] = useState("");
+  const [propPicked, setPropPicked] = useState(null);
   async function loadProps(marketKey) {
     if (!oddsApiKey || !oddsEvent?.id) return;
     setPropLoading(true);
     setPropError("");
     setPropRows(null);
+    setPropPicked(null);
     try {
       const eventOdds = await fetchPlayerProps(oddsApiKey, oddsEvent.id, marketKey);
       const rows = propRowsForMarket(eventOdds, marketKey);
@@ -1481,6 +1488,7 @@ function PickForm({
     const desc = row.side ? `${row.player} ${row.side} ${row.line} ${marketLabel}` : `${row.player} — ${marketLabel}`;
     setNotes(desc);
     setOdds(row.odds);
+    setPropPicked(row);
   }
   function submit() {
     if (!team.trim() || odds === "") {
@@ -1551,15 +1559,24 @@ function PickForm({
     className: "bp-hint"
   }, "Add an Odds API key (🔑 button in the header) to pull real bookmaker lines here.")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Bet type"), /*#__PURE__*/React.createElement("select", {
     value: betType,
-    onChange: e => setBetType(e.target.value)
+    onChange: e => {
+      setBetType(e.target.value);
+      setOddsPicked(null);
+    }
   }, BET_TYPES.map(b => /*#__PURE__*/React.createElement("option", {
     key: b.id,
     value: b.id
-  }, b.label)))), oddsApiKey && team && betType !== "prop" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Live odds — tap one to fill in Odds", betType !== "moneyline" ? " and the line" : ""), oddsLoading && /*#__PURE__*/React.createElement("div", {
+  }, b.label)))), oddsApiKey && team && betType !== "prop" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Live odds", oddsPicked ? "" : ` — tap one to fill in Odds${betType !== "moneyline" ? " and the line" : ""}`), oddsLoading && /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
   }, "Loading odds…"), oddsError && /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
-  }, oddsError), !oddsLoading && oddsRows.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, oddsError), oddsPicked ? /*#__PURE__*/React.createElement("div", {
+    className: "bp-odds-row picked"
+  }, /*#__PURE__*/React.createElement("span", null, "Using ", oddsPicked.bookmaker, oddsPicked.line != null && betType !== "moneyline" ? ` · ${oddsPicked.line > 0 ? "+" : ""}${oddsPicked.line}` : "", " · ", oddsPicked.odds.toFixed(2)), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "bp-odds-change",
+    onClick: () => setOddsPicked(null)
+  }, "Change")) : /*#__PURE__*/React.createElement(React.Fragment, null, !oddsLoading && oddsRows.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "bp-odds-rows"
   }, oddsRows.map((row, i) => /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -1570,9 +1587,15 @@ function PickForm({
     className: "bp-odds-row-value"
   }, row.line != null && betType !== "moneyline" ? `${row.line > 0 ? "+" : ""}${row.line} · ` : "", row.odds.toFixed(2))))), !oddsLoading && !oddsError && oddsRows.length === 0 && oddsEvent && /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
-  }, "No bookmaker has posted a ", betType, " line for this game yet.")), oddsApiKey && team && betType === "prop" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Browse player props"), !oddsEvent && /*#__PURE__*/React.createElement("div", {
+  }, "No bookmaker has posted a ", betType, " line for this game yet."))), oddsApiKey && team && betType === "prop" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Browse player props"), !oddsEvent && /*#__PURE__*/React.createElement("div", {
     className: "bp-hint"
-  }, "Search and pick a game above first to browse its props."), oddsEvent && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "Search and pick a game above first to browse its props."), oddsEvent && /*#__PURE__*/React.createElement(React.Fragment, null, propPicked ? /*#__PURE__*/React.createElement("div", {
+    className: "bp-odds-row picked"
+  }, /*#__PURE__*/React.createElement("span", null, "Using ", propPicked.player, " ", propPicked.side ? `${propPicked.side} ${propPicked.line}` : "", " (", propPicked.bookmaker, ") · ", propPicked.odds.toFixed(2)), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "bp-odds-change",
+    onClick: () => setPropPicked(null)
+  }, "Change")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "bp-search-row"
   }, /*#__PURE__*/React.createElement("select", {
     value: propMarket,
@@ -1609,7 +1632,7 @@ function PickForm({
     }
   }, "(", row.bookmaker, ")")), /*#__PURE__*/React.createElement("span", {
     className: "bp-odds-row-value"
-  }, row.odds.toFixed(2))))))), /*#__PURE__*/React.createElement("div", {
+  }, row.odds.toFixed(2)))))))), /*#__PURE__*/React.createElement("div", {
     className: "bp-form-row"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Your team / side"), /*#__PURE__*/React.createElement("input", {
     value: team,
@@ -1628,7 +1651,10 @@ function PickForm({
     onChange: e => setLine(e.target.value)
   })), betType === "total" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", null, "Over / Under"), /*#__PURE__*/React.createElement("select", {
     value: side,
-    onChange: e => setSide(e.target.value)
+    onChange: e => {
+      setSide(e.target.value);
+      setOddsPicked(null);
+    }
   }, /*#__PURE__*/React.createElement("option", {
     value: "over"
   }, "Over"), /*#__PURE__*/React.createElement("option", {

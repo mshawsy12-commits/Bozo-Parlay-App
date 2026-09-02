@@ -1076,6 +1076,7 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
   const [oddsEvent, setOddsEvent] = useState(null);
   const [oddsLoading, setOddsLoading] = useState(false);
   const [oddsError, setOddsError] = useState("");
+  const [oddsPicked, setOddsPicked] = useState(null);
 
   async function runSearch() {
     setSearching(true);
@@ -1106,6 +1107,9 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
     setSearchResults(null);
     setOddsEvent(null);
     setOddsError("");
+    setOddsPicked(null);
+    setPropRows(null);
+    setPropPicked(null);
 
     if (oddsApiKey) {
       setOddsLoading(true);
@@ -1124,17 +1128,20 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
   function useOddsRow(row) {
     setOdds(row.odds);
     if (row.line != null && (betType === "spread" || betType === "total")) setLine(row.line);
+    setOddsPicked(row);
   }
   const [propMarket, setPropMarket] = useState(PROP_MARKETS[0].key);
   const [propRows, setPropRows] = useState(null);
   const [propLoading, setPropLoading] = useState(false);
   const [propError, setPropError] = useState("");
+  const [propPicked, setPropPicked] = useState(null);
 
   async function loadProps(marketKey) {
     if (!oddsApiKey || !oddsEvent?.id) return;
     setPropLoading(true);
     setPropError("");
     setPropRows(null);
+    setPropPicked(null);
     try {
       const eventOdds = await fetchPlayerProps(oddsApiKey, oddsEvent.id, marketKey);
       const rows = propRowsForMarket(eventOdds, marketKey);
@@ -1153,6 +1160,7 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
       : `${row.player} — ${marketLabel}`;
     setNotes(desc);
     setOdds(row.odds);
+    setPropPicked(row);
   }
   function submit() {
     if (!team.trim() || odds === "") {
@@ -1202,7 +1210,13 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
       </div>
       <div>
         <label>Bet type</label>
-        <select value={betType} onChange={(e) => setBetType(e.target.value)}>
+        <select
+          value={betType}
+          onChange={(e) => {
+            setBetType(e.target.value);
+            setOddsPicked(null);
+          }}
+        >
           {BET_TYPES.map((b) => (
             <option key={b.id} value={b.id}>{b.label}</option>
           ))}
@@ -1210,24 +1224,40 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
       </div>
       {oddsApiKey && team && betType !== "prop" && (
         <div>
-          <label>Live odds — tap one to fill in Odds{betType !== "moneyline" ? " and the line" : ""}</label>
+          <label>Live odds{oddsPicked ? "" : ` — tap one to fill in Odds${betType !== "moneyline" ? " and the line" : ""}`}</label>
           {oddsLoading && <div className="bp-hint">Loading odds…</div>}
           {oddsError && <div className="bp-hint">{oddsError}</div>}
-          {!oddsLoading && oddsRows.length > 0 && (
-            <div className="bp-odds-rows">
-              {oddsRows.map((row, i) => (
-                <button type="button" key={i} className="bp-odds-row" onClick={() => useOddsRow(row)}>
-                  <span>{row.bookmaker}</span>
-                  <span className="bp-odds-row-value">
-                    {row.line != null && betType !== "moneyline" ? `${row.line > 0 ? "+" : ""}${row.line} · ` : ""}
-                    {row.odds.toFixed(2)}
-                  </span>
-                </button>
-              ))}
+          {oddsPicked ? (
+            <div className="bp-odds-row picked">
+              <span>
+                Using {oddsPicked.bookmaker}
+                {oddsPicked.line != null && betType !== "moneyline" ? ` · ${oddsPicked.line > 0 ? "+" : ""}${oddsPicked.line}` : ""}
+                {" · "}
+                {oddsPicked.odds.toFixed(2)}
+              </span>
+              <button type="button" className="bp-odds-change" onClick={() => setOddsPicked(null)}>
+                Change
+              </button>
             </div>
-          )}
-          {!oddsLoading && !oddsError && oddsRows.length === 0 && oddsEvent && (
-            <div className="bp-hint">No bookmaker has posted a {betType} line for this game yet.</div>
+          ) : (
+            <>
+              {!oddsLoading && oddsRows.length > 0 && (
+                <div className="bp-odds-rows">
+                  {oddsRows.map((row, i) => (
+                    <button type="button" key={i} className="bp-odds-row" onClick={() => useOddsRow(row)}>
+                      <span>{row.bookmaker}</span>
+                      <span className="bp-odds-row-value">
+                        {row.line != null && betType !== "moneyline" ? `${row.line > 0 ? "+" : ""}${row.line} · ` : ""}
+                        {row.odds.toFixed(2)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!oddsLoading && !oddsError && oddsRows.length === 0 && oddsEvent && (
+                <div className="bp-hint">No bookmaker has posted a {betType} line for this game yet.</div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1237,29 +1267,46 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
           {!oddsEvent && <div className="bp-hint">Search and pick a game above first to browse its props.</div>}
           {oddsEvent && (
             <>
-              <div className="bp-search-row">
-                <select value={propMarket} onChange={(e) => setPropMarket(e.target.value)} style={{ flex: 1 }}>
-                  {PROP_MARKETS.map((m) => (
-                    <option key={m.key} value={m.key}>{m.label}</option>
-                  ))}
-                </select>
-                <button type="button" className="bp-btn small" onClick={() => loadProps(propMarket)} disabled={propLoading} style={{ flexShrink: 0 }}>
-                  {propLoading ? "…" : "Load"}
-                </button>
-              </div>
-              {propError && <div className="bp-hint">{propError}</div>}
-              {propRows && propRows.length > 0 && (
-                <div className="bp-odds-rows" style={{ marginTop: 6 }}>
-                  {propRows.map((row, i) => (
-                    <button type="button" key={i} className="bp-odds-row" onClick={() => usePropRow(row)}>
-                      <span>
-                        {row.player} {row.side ? `${row.side} ${row.line}` : ""}{" "}
-                        <span style={{ color: "var(--ink-dim)" }}>({row.bookmaker})</span>
-                      </span>
-                      <span className="bp-odds-row-value">{row.odds.toFixed(2)}</span>
-                    </button>
-                  ))}
+              {propPicked ? (
+                <div className="bp-odds-row picked">
+                  <span>
+                    Using {propPicked.player} {propPicked.side ? `${propPicked.side} ${propPicked.line}` : ""} ({propPicked.bookmaker}) · {propPicked.odds.toFixed(2)}
+                  </span>
+                  <button
+                    type="button"
+                    className="bp-odds-change"
+                    onClick={() => setPropPicked(null)}
+                  >
+                    Change
+                  </button>
                 </div>
+              ) : (
+                <>
+                  <div className="bp-search-row">
+                    <select value={propMarket} onChange={(e) => setPropMarket(e.target.value)} style={{ flex: 1 }}>
+                      {PROP_MARKETS.map((m) => (
+                        <option key={m.key} value={m.key}>{m.label}</option>
+                      ))}
+                    </select>
+                    <button type="button" className="bp-btn small" onClick={() => loadProps(propMarket)} disabled={propLoading} style={{ flexShrink: 0 }}>
+                      {propLoading ? "…" : "Load"}
+                    </button>
+                  </div>
+                  {propError && <div className="bp-hint">{propError}</div>}
+                  {propRows && propRows.length > 0 && (
+                    <div className="bp-odds-rows" style={{ marginTop: 6 }}>
+                      {propRows.map((row, i) => (
+                        <button type="button" key={i} className="bp-odds-row" onClick={() => usePropRow(row)}>
+                          <span>
+                            {row.player} {row.side ? `${row.side} ${row.line}` : ""}{" "}
+                            <span style={{ color: "var(--ink-dim)" }}>({row.bookmaker})</span>
+                          </span>
+                          <span className="bp-odds-row-value">{row.odds.toFixed(2)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1284,7 +1331,13 @@ function PickForm({ initial, onSubmit, oddsApiKey }) {
           {betType === "total" && (
             <div>
               <label>Over / Under</label>
-              <select value={side} onChange={(e) => setSide(e.target.value)}>
+              <select
+                value={side}
+                onChange={(e) => {
+                  setSide(e.target.value);
+                  setOddsPicked(null);
+                }}
+              >
                 <option value="over">Over</option>
                 <option value="under">Under</option>
               </select>
