@@ -1414,12 +1414,29 @@ function PickForm({
   async function runSearch() {
     setSearching(true);
     setSearchError("");
+    // A fresh search means "start over" — clear anything tied to a previously
+    // selected game so it can't linger (like an old date silently filtering
+    // out the new search, or stale odds/props still showing).
+    setTeam("");
+    setOpponent("");
+    setGameDate("");
+    setKickoffTime("");
+    setEspnEventId(null);
+    setOdds("");
+    setLine("");
+    setNotes("");
+    setOddsEvent(null);
+    setOddsError("");
+    setOddsPicked(null);
+    setPropRows(null);
+    setPropError("");
+    setPropPicked(null);
     try {
-      const data = await fetchEspnScoreboard(gameDate || "");
+      const data = await fetchEspnScoreboard("");
       const options = (data?.events || []).map(eventToOption);
       const q = normalize(searchQuery);
       const filtered = q ? options.filter(o => normalize(o.home).includes(q) || normalize(o.away).includes(q)) : options;
-      if (filtered.length === 0) setSearchError("No matching games found for that date/team.");
+      if (filtered.length === 0) setSearchError("No matching games found for that team.");
       setSearchResults(filtered);
     } catch {
       setSearchError("Couldn't reach the live schedule right now.");
